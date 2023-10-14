@@ -1,0 +1,6 @@
+version: "1"
+rules:
+  - base: master
+    upstream: ublue-os:master
+    mergeMethod: merge
+    mergeUnstable: false
