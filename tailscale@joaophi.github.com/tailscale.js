@@ -93,6 +93,11 @@ export const Tailscale = GObject.registerClass(
         GObject.ParamFlags.READWRITE,
         ""
       ),
+      "exit-node-name": GObject.ParamSpec.string(
+        "exit-node-name", "", "",
+        GObject.ParamFlags.READABLE,
+        ""
+      ),
       "nodes": GObject.ParamSpec.jsobject(
         "nodes", "", "",
         GObject.ParamFlags.READABLE,
@@ -111,6 +116,7 @@ export const Tailscale = GObject.registerClass(
       this._shields_up = false;
       this._ssh = false;
       this._exit_node = "";
+      this._exit_node_name = null;
       this._nodes = [];
       this._cancelable = new Gio.Cancellable();
       this._listen();
@@ -130,17 +136,23 @@ export const Tailscale = GObject.registerClass(
 
     _process_nodes(prefs, peers) {
       const nodes = peers
-        .map(peer => ({
-          id: peer.ID,
-          name: peer.DNSName.split(".")[0],
-          os: peer.OS,
-          exit_node: peer.ID == prefs.ExitNodeID,
-          exit_node_option: peer.ExitNodeOption,
-          online: peer.Online,
-          ips: peer.TailscaleIPs,
-        }))
+        .map(peer => {
+          const node = {
+            id: peer.ID,
+            name: peer.DNSName.split(".")[0],
+            os: peer.OS,
+            exit_node: peer.ID == prefs.ExitNodeID,
+            exit_node_option: peer.ExitNodeOption,
+            online: peer.Online,
+            ips: peer.TailscaleIPs,
+            mullvad: peer.Tags?.includes("tag:mullvad-exit-node") || false,
+            location: peer.Location,
+          };
+          return node;
+        })
         .sort((a, b) =>
-          (b.online - a.online)
+          (b.exit_node - a.exit_node)
+          || (b.online - a.online)
           || (b.exit_node_option - a.exit_node_option)
           || a.name.localeCompare(b.name)
         );
@@ -156,6 +168,9 @@ export const Tailscale = GObject.registerClass(
       if (exit_node_id != this._exit_node) {
         this._exit_node = exit_node_id;
         this.notify("exit-node");
+        const exitNodePeer = this._peers.find(peer => peer.ID === exit_node_id);
+        this._exit_node_name = exitNodePeer ? exitNodePeer.DNSName.split(".")[0] : null;
+        this.notify("exit-node-name");
       }
     }
 
@@ -276,6 +291,10 @@ export const Tailscale = GObject.registerClass(
       this._update_prefs({ ExitNodeID: value });
     }
 
+    get exit_node_name() {
+      return this._exit_node_name;
+    }
+
     get nodes() {
       return this._nodes;
     }
@@ -304,6 +323,8 @@ export const Tailscale = GObject.registerClass(
                 ExitNodeOption: peer.AllowedIPs?.includes("0.0.0.0/0"),
                 Online: peer.Online,
                 TailscaleIPs: peer.Addresses.map(address => address.split("/")[0]),
+                Tags: peer.Tags,
+                Location: peer.Hostinfo.Location
               }));
               should_update = true;
             }

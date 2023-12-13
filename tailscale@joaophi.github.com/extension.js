@@ -125,20 +125,33 @@ const TailscaleMenuToggle = GObject.registerClass(
         toggleMode: true,
         menuEnabled: true,
       });
+
       this.title = "Tailscale";
       tailscale.bind_property("running", this, "checked", GObject.BindingFlags.SYNC_CREATE | GObject.BindingFlags.BIDIRECTIONAL);
 
       // This function is unique to this class. It adds a nice header with an
       // icon, title and optional subtitle. It's recommended you do so for
       // consistency with other menus.
-      this.menu.setHeader(icon, this.title);
+      tailscale.connect("notify::exit-node-name", () => {
+        this.subtitle = tailscale.exit_node_name;
+        this.menu.setHeader(icon, this.title, this.subtitle);
+      });
+      this.menu.setHeader(icon, this.title, tailscale.exit_node_name);
 
       // NODES
       const nodes = new PopupMenu.PopupMenuSection();
       const update_nodes = (obj) => {
         nodes.removeAll();
+        const mullvad = new PopupMenu.PopupSubMenuMenuItem("Mullvad", false, {});
         for (const node of obj.nodes) {
-          const device_icon = !node.online ? "network-offline-symbolic" : ((node.os == "android" || node.os == "iOS") ? "phone-symbolic" : "computer-symbolic");
+          const menu = (node.mullvad && !node.exit_node) ? mullvad.menu : nodes;
+          const device_icon = !node.online
+            ? "network-offline-symbolic"
+            : ((node.os == "android" || node.os == "iOS")
+              ? "phone-symbolic"
+              : (node.mullvad
+                ? "network-vpn-symbolic"
+                : "computer-symbolic"));
           const subtitle = node.exit_node ? _("disable exit node") : (node.exit_node_option ? _("use as exit node") : "");
           const onClick = node.exit_node_option ? () => { tailscale.exit_node = node.exit_node ? "" : node.id; } : null;
           const onLongClick = () => {
@@ -151,7 +164,12 @@ const TailscaleMenuToggle = GObject.registerClass(
             return true;
           };
 
-          nodes.addMenuItem(new TailscaleDeviceItem(device_icon, node.name, subtitle, onClick, onLongClick));
+          menu.addMenuItem(new TailscaleDeviceItem(device_icon, node.name, subtitle, onClick, onLongClick));
+        }
+        if (mullvad.menu.isEmpty()) {
+          mullvad.destroy();
+        } else {
+          nodes.addMenuItem(mullvad);
         }
       }
       tailscale.connect("notify::nodes", (obj) => update_nodes(obj));
