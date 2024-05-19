@@ -13,7 +13,6 @@ build:
 	                      --extra-source=tailscale.js \
 	                      --extra-source=timeout.js \
 	                      --extra-source=compat.js \
-	                      --extra-source=stylesheet.css; \
 	mv $(EXTENSION_DIR).shell-extension.zip ../$(BUNDLE_PATH)
 
 install:
